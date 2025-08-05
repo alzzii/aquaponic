@@ -1,30 +1,18 @@
-const mysql = require('mysql2');
-require('dotenv').config();
-const { URL } = require('url');
-
-const dbUrl = process.env.DATABASE_URL;
-
-if (!dbUrl) {
-  console.error('❌ DATABASE_URL tidak ditemukan di env');
-  process.exit(1);
-}
-
-const parsedUrl = new URL(dbUrl);
+const mysql = require('mysql');
 
 const db = mysql.createConnection({
-  host: parsedUrl.hostname,
-  port: parsedUrl.port || 3306,
-  user: parsedUrl.username,
-  password: parsedUrl.password,
-  database: parsedUrl.pathname.replace('/', '')
+  host: 'sql12.freemysqlhosting.net',
+  user: 'sql12793713',
+  password: 'NuW3K1SbaE',
+  database: 'sql12793713'
 });
 
 db.connect((err) => {
   if (err) {
-    console.error('❌ Gagal koneksi ke MySQL:', err.message);
-  } else {
-    console.log('✅ Terkoneksi ke database MySQL');
+    console.error('Koneksi ke database gagal:', err);
+    return;
   }
+  console.log('Tersambung ke database!');
 });
 
 module.exports = db;
