@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aquaponic Monitoring Dashboard</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="bg-gray-100">
+    <div class="container mx-auto px-4 py-8">
+        <!-- Header -->
+        <header class="flex justify-between items-center mb-8">
+            <div>
+                <h1 class="text-3xl font-bold text-gray-800">Aquaponic Monitoring</h1>
+                <div class="flex items-center space-x-4">
+                    <p id="current-date" class="text-gray-600"></p>
+                    <p id="current-time" class="text-gray-600"></p>
+                </div>
+            </div>
+            <div class="flex items-center">
+                <span id="connectionStatus" class="disconnected"></span>
+                <span id="connectionText" class="text-sm">Disconnected</span>
+                <button id="connectBtn" class="ml-4 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">Connect</button>
+            </div>
+        </header>
+        <p class="text-sm text-gray-600 mt-2">Last Update: <span id="lastUpdated">--</span></p>
+
+
+        <!-- Connection Settings -->
+        <div class="bg-white p-6 rounded-lg shadow mb-8">
+            <h2 class="text-xl font-semibold mb-4 text-gray-800">Connection Settings</h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">WebSocket URL</label>
+                    <input type="text" id="wsUrl" value="ws://192.168.1.100:80" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Baud Rate</label>
+                    <select id="baudRate" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                        <option value="9600">9600</option>
+                        <option value="115200" selected>115200</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Data Interval (ms)</label>
+                    <input type="number" id="dataInterval" value="2000" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Dashboard -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+            <!-- Sensor Cards -->
+            <div class="sensor-card bg-white p-6 rounded-lg shadow" id="tempCard">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <h3 class="text-gray-500 text-sm font-medium">Temperature</h3>
+                        <p class="text-3xl font-bold sensor-value" id="tempValue">-- °C</p>
+                        <p class="text-xs text-gray-400 mt-1">Range: 20-30°C</p>
+                    </div>
+                </div>
+                <div class="mt-4">
+                    <canvas id="tempChart" height="120"></canvas>
+                </div>
+            </div>
+
+            <div class="sensor-card bg-white p-6 rounded-lg shadow" id="tdsCard">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <h3 class="text-gray-500 text-sm font-medium">TDS</h3>
+                        <p class="text-3xl font-bold sensor-value" id="tdsValue">-- ppm</p>
+                        <p class="text-xs text-gray-400 mt-1">Range: 100-600 ppm</p>
+                    </div>
+                </div>
+                <div class="mt-4">
+                    <canvas id="tdsChart" height="120"></canvas>
+                </div>
+            </div>
+
+            <div class="sensor-card bg-white p-6 rounded-lg shadow" id="turbidityCard">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <h3 class="text-gray-500 text-sm font-medium">Turbidity</h3>
+                        <p class="text-3xl font-bold sensor-value" id="turbidityValue">-- NTU</p>
+                        <p class="text-xs text-gray-400 mt-1">Range: 0-10 NTU</p>
+                    </div>
+                </div>
+                <div class="mt-4">
+                    <canvas id="turbidityChart" height="120"></canvas>
+                </div>
+            </div>
+
+            <div class="sensor-card bg-white p-6 rounded-lg shadow" id="ammoniaCard">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <h3 class="text-gray-500 text-sm font-medium">Ammonia</h3>
+                        <p class="text-3xl font-bold sensor-value" id="ammoniaValue">-- mg/L</p>
+                        <p class="text-xs text-gray-400 mt-1">Range: 0-2 mg/L</p>
+                    </div>
+                </div>
+                <div class="mt-4">
+                    <canvas id="ammoniaChart" height="120"></canvas>
+                </div>
+            </div>
+
+            <div class="sensor-card bg-white p-6 rounded-lg shadow" id="phCard">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <h3 class="text-gray-500 text-sm font-medium">pH Level</h3>
+                        <p class="text-3xl font-bold sensor-value" id="phValue">-- pH</p>
+                        <p class="text-xs text-gray-400 mt-1">Range: 6.0-8.0 pH</p>
+                    </div>
+                </div>
+                <div class="mt-4">
+                    <canvas id="phChart" height="120"></canvas>
+                </div>
+            </div>
+
+            <div class="sensor-card bg-white p-6 rounded-lg shadow" id="waterLevelCard">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <h3 class="text-gray-500 text-sm font-medium">Water Level</h3>
+                        <p class="text-3xl font-bold sensor-value" id="waterLevelValue">-- cm</p>
+                        <p class="text-xs text-gray-400 mt-1">Range: 10-50 cm</p>
+                    </div>
+                </div>
+                <div class="mt-4">
+                    <canvas id="waterLevelChart" height="120"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Log Section -->
+        <div class="bg-white p-6 rounded-lg shadow mb-8">
+            <h2 class="text-xl font-semibold mb-4 text-gray-800">Serial Monitor</h2>
+            <div class="bg-gray-50 p-4 rounded overflow-y-auto h-48">
+                <pre id="serialLog" class="text-sm font-mono text-gray-700"></pre>
+            </div>
+            <div class="mt-4 flex justify-between">
+                <button id="clearLogBtn" class="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700">Clear Log</button>
+                <button id="saveLogBtn" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">Save Log</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
