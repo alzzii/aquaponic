@@ -1,60 +1,98 @@
+// Import library yang dibutuhkan
 const express = require('express');
+const http = require('http');
+const { WebSocketServer } = require('ws');
 const cors = require('cors');
-const path = require('path');
-const WebSocket = require('ws');
-const dotenv = require('dotenv');
-const db = require('./db');
+const { MongoClient, ServerApiVersion } = require('mongodb'); // <-- BARU
 
-dotenv.config();
-const app = express();
+// Gunakan port dari environment variable atau default ke 8080
 const PORT = process.env.PORT || 8080;
 
+// ===== KONEKSI DATABASE (BARU) =====
+// Ambil Connection String dari Environment Variable di Railway
+const uri = process.env.MONGODB_URI; 
+if (!uri) {
+  console.error("Error: MONGODB_URI tidak ditemukan. Pastikan sudah diatur di Railway.");
+  process.exit(1); // Hentikan aplikasi jika URI tidak ada
+}
+
+// Buat klien MongoDB
+const mongoClient = new MongoClient(uri, {
+  serverApi: {
+    version: ServerApiVersion.v1,
+    strict: true,
+    deprecationErrors: true,
+  }
+});
+
+let db; // Variabel untuk menyimpan koneksi database
+
+async function connectToDb() {
+  try {
+    await mongoClient.connect();
+    db = mongoClient.db("aquaponic_db"); // Pilih atau buat database bernama 'aquaponic_db'
+    console.log("✓ Berhasil terhubung ke MongoDB Atlas!");
+  } catch(e) {
+    console.error("Gagal terhubung ke MongoDB:", e);
+    await mongoClient.close();
+  }
+}
+// ===================================
+
+// Inisialisasi server Express
+const app = express();
 app.use(cors());
-app.use(express.json());
-app.use(express.static(path.join(__dirname, 'public')));
 
-const wss = new WebSocket.Server({ noServer: true });
-const clients = new Set();
+app.get('/', (req, res) => {
+  res.send('WebSocket Server with MongoDB is running!');
+});
 
-app.post('/api/data', (req, res) => {
-  const data = req.body;
-  const query = `
-    INSERT INTO sensor_data (Heater, NH3, Pompa_Buang, Pompa_Masuk, Suhu, TDS, TinggiAir, Turbidity, datavalid, pH, pH_Down, pH_Up, wifiConnected)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `;
-  const values = [
-    data.Heater, data.NH3, data.Pompa_Buang, data.Pompa_Masuk, data.Suhu,
-    data.TDS, data.TinggiAir, data.Turbidity, data.datavalid, data.pH,
-    data.pH_Down, data.pH_Up, data.wifiConnected
-  ];
+const server = http.createServer(app);
+const wss = new WebSocketServer({ server });
 
-  db.query(query, values, (err) => {
-    if (err) return res.status(500).json({ error: err.message });
-    const update = { type: 'update', data };
-    clients.forEach(client => client.send(JSON.stringify(update)));
-    res.json({ success: true });
+wss.on('connection', (ws) => {
+  console.log('Client baru terhubung!');
+  ws.send('Selamat datang di WebSocket Server!');
+
+  ws.on('message', async (message) => { // <-- Tambah 'async'
+    console.log('Menerima pesan: %s', message);
+
+    try {
+      const parsedMessage = JSON.parse(message);
+
+      // Jika ini data sensor dari ESP32, simpan ke database
+      if (parsedMessage.type === 'sensorData') {
+        if (db) {
+          // Pilih atau buat collection bernama 'sensor_readings'
+          const collection = db.collection('sensor_readings'); 
+          // Tambahkan timestamp dari server untuk konsistensi
+          parsedMessage.createdAt = new Date();
+          // Simpan data ke collection
+          await collection.insertOne(parsedMessage);
+          console.log('✓ Data sensor berhasil disimpan ke database.');
+        } else {
+          console.log('Database belum siap, data tidak disimpan.');
+        }
+      }
+    } catch (e) {
+      // Abaikan jika pesan bukan JSON (misal: "ping" atau pesan koneksi)
+    }
+
+    // Broadcast pesan ke semua client lain
+    wss.clients.forEach((client) => {
+      if (client !== ws && client.readyState === ws.OPEN) {
+        client.send(String(message));
+      }
+    });
   });
+
+  ws.on('close', () => console.log('Client terputus'));
+  ws.on('error', (error) => console.error('WebSocket error:', error));
 });
 
-app.get('/api/history', (req, res) => {
-  db.query('SELECT * FROM sensor_data ORDER BY timestamp DESC LIMIT 100', (err, results) => {
-    if (err) return res.status(500).json({ error: err.message });
-    res.json(results);
-  });
-});
-
-wss.on('connection', ws => {
-  clients.add(ws);
-  console.log('WebSocket connected');
-  ws.on('close', () => clients.delete(ws));
-});
-
-const server = app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Server running on port ${PORT}`);
-});
-
-server.on('upgrade', (req, socket, head) => {
-  wss.handleUpgrade(req, socket, head, ws => {
-    wss.emit('connection', ws, req);
-  });
+// Jalankan server
+server.listen(PORT, () => {
+  console.log(`Server berjalan di port ${PORT}`);
+  // Hubungkan ke database saat server pertama kali berjalan
+  connectToDb(); 
 });
