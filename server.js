@@ -3,20 +3,20 @@ const express = require('express');
 const http = require('http');
 const { WebSocketServer } = require('ws');
 const cors = require('cors');
-const { MongoClient, ServerApiVersion } = require('mongodb'); // <-- BARU
+const { MongoClient, ServerApiVersion } = require('mongodb');
 
-// Gunakan port dari environment variable atau default ke 8080
 const PORT = process.env.PORT || 8080;
 
-// ===== KONEKSI DATABASE (BARU) =====
-// Ambil Connection String dari Environment Variable di Railway
-const uri = process.env.MONGODB_URI; 
+// ===== KONEKSI DATABASE (DENGAN LOGGING TAMBAHAN) =====
+const uri = process.env.MONGODB_URI;
+let db;
+
+// Pengecekan awal URI
 if (!uri) {
-  console.error("Error: MONGODB_URI tidak ditemukan. Pastikan sudah diatur di Railway.");
-  process.exit(1); // Hentikan aplikasi jika URI tidak ada
+  console.error("FATAL ERROR: MONGODB_URI tidak ditemukan di environment variables.");
+  process.exit(1);
 }
 
-// Buat klien MongoDB
 const mongoClient = new MongoClient(uri, {
   serverApi: {
     version: ServerApiVersion.v1,
@@ -25,27 +25,26 @@ const mongoClient = new MongoClient(uri, {
   }
 });
 
-let db; // Variabel untuk menyimpan koneksi database
-
 async function connectToDb() {
+  console.log("Mencoba menghubungkan ke database..."); // <-- LOG TAMBAHAN 1
   try {
     await mongoClient.connect();
-    db = mongoClient.db("aquaponic_db"); // Pilih atau buat database bernama 'aquaponic_db'
+    db = mongoClient.db("aquaponic_db");
     console.log("✓ Berhasil terhubung ke MongoDB Atlas!");
-  } catch(e) {
-    console.error("Gagal terhubung ke MongoDB:", e);
-    await mongoClient.close();
+  } catch(error) {
+    // --- BLOK ERROR YANG DISEMPURNAKAN ---
+    console.error("!!! GAGAL TERHUBUNG KE MONGODB !!!");
+    console.error("Pesan Error Lengkap:");
+    console.error(error); // <-- LOG TAMBAHAN 2: Tampilkan seluruh objek error
+    process.exit(1); // <-- Paksa aplikasi berhenti setelah error fatal
+    // ------------------------------------
   }
 }
 // ===================================
 
-// Inisialisasi server Express
 const app = express();
 app.use(cors());
-
-app.get('/', (req, res) => {
-  res.send('WebSocket Server with MongoDB is running!');
-});
+app.get('/', (req, res) => res.send('WebSocket Server with MongoDB is running!'));
 
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
@@ -54,31 +53,23 @@ wss.on('connection', (ws) => {
   console.log('Client baru terhubung!');
   ws.send('Selamat datang di WebSocket Server!');
 
-  ws.on('message', async (message) => { // <-- Tambah 'async'
+  ws.on('message', async (message) => {
     console.log('Menerima pesan: %s', message);
 
     try {
       const parsedMessage = JSON.parse(message);
-
-      // Jika ini data sensor dari ESP32, simpan ke database
       if (parsedMessage.type === 'sensorData') {
         if (db) {
-          // Pilih atau buat collection bernama 'sensor_readings'
-          const collection = db.collection('sensor_readings'); 
-          // Tambahkan timestamp dari server untuk konsistensi
+          const collection = db.collection('sensor_readings');
           parsedMessage.createdAt = new Date();
-          // Simpan data ke collection
           await collection.insertOne(parsedMessage);
           console.log('✓ Data sensor berhasil disimpan ke database.');
         } else {
           console.log('Database belum siap, data tidak disimpan.');
         }
       }
-    } catch (e) {
-      // Abaikan jika pesan bukan JSON (misal: "ping" atau pesan koneksi)
-    }
-
-    // Broadcast pesan ke semua client lain
+    } catch (e) { /* Abaikan pesan non-JSON */ }
+    
     wss.clients.forEach((client) => {
       if (client !== ws && client.readyState === ws.OPEN) {
         client.send(String(message));
@@ -93,6 +84,5 @@ wss.on('connection', (ws) => {
 // Jalankan server
 server.listen(PORT, () => {
   console.log(`Server berjalan di port ${PORT}`);
-  // Hubungkan ke database saat server pertama kali berjalan
-  connectToDb(); 
+  connectToDb();
 });
